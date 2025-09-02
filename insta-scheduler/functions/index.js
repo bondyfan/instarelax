@@ -42,22 +42,29 @@ exports.publishScheduledPosts = onSchedule("every 1 minutes", async (event) => {
           throw new Error(`User ${post.userId} not found`);
         }
         
-        // For now, we'll get Instagram details from a separate collection
-        // You might need to store Instagram connection info differently
-        const instagramQuery = await db.collection("instagram_connections")
-          .where("userId", "==", post.userId)
-          .limit(1)
-          .get();
-        
-        if (instagramQuery.empty) {
-          throw new Error(`No Instagram connection found for user ${post.userId}`);
+        // Fetch Instagram connection. First try direct doc lookup by userId (we save docs with userId as ID),
+        // then fall back to query by field if needed.
+        let instagramData;
+        const connDoc = await db.collection("instagram_connections").doc(post.userId).get();
+        if (connDoc.exists) {
+          instagramData = connDoc.data();
+          logger.info(`Found instagram connection by doc id for user ${post.userId}`);
+        } else {
+          const instagramQuery = await db.collection("instagram_connections")
+            .where("userId", "==", post.userId)
+            .limit(1)
+            .get();
+
+          if (instagramQuery.empty) {
+            throw new Error(`No Instagram connection found for user ${post.userId}`);
+          }
+          instagramData = instagramQuery.docs[0].data();
+          logger.info(`Found instagram connection by query for user ${post.userId}`);
         }
-        
-        const instagramData = instagramQuery.docs[0].data();
         const igUserId = instagramData.igUserId;
         
         if (!igUserId) {
-          throw new Error("Instagram User ID not found");
+          throw new Error(`Instagram User ID not found in instagram_connections for user ${post.userId}`);
         }
         
         // Publish to Instagram using the same logic as the API route

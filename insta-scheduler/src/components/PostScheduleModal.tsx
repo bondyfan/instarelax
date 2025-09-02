@@ -2,19 +2,22 @@
 
 import { useState, useRef, useEffect } from "react";
 import { format } from "date-fns";
-import { FaImage, FaVideo, FaUpload, FaTimes, FaInstagram, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
+import { FaImage, FaVideo, FaUpload, FaTimes, FaInstagram, FaCheckCircle, FaExclamationTriangle, FaCrop } from "react-icons/fa";
 import Modal from "./Modal";
 import { uploadMediaAndGetUrl } from "@/lib/storage";
 import { useInstagramConnection } from "./InstagramConnection";
 import { useAuth } from "./AuthProvider";
-import { saveScheduledPost } from "@/lib/firestore";
+import { saveScheduledPost, updateScheduledPost } from "@/lib/firestore";
 import axios from "axios";
+import ImageCropper from "./ImageCropper";
+import { ScheduledPost } from "@/types/schedule";
 
 interface PostScheduleModalProps {
   open: boolean;
   onClose: () => void;
   selectedDate: Date | null;
   onPostScheduled?: () => void;
+  editPost?: ScheduledPost | null;
 }
 
 export default function PostScheduleModal({
@@ -22,6 +25,7 @@ export default function PostScheduleModal({
   onClose,
   selectedDate,
   onPostScheduled,
+  editPost,
 }: PostScheduleModalProps) {
   const [caption, setCaption] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -29,6 +33,8 @@ export default function PostScheduleModal({
   const [time, setTime] = useState("09:00");
   const [submitting, setSubmitting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showCropper, setShowCropper] = useState(false);
+  const [tempImageUrl, setTempImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const instagramData = useInstagramConnection();
   const { user } = useAuth();
@@ -43,29 +49,98 @@ export default function PostScheduleModal({
     }
   }, [file]);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Populate form when editing
+  useEffect(() => {
+    if (editPost) {
+      setCaption(editPost.caption);
+      setMediaType(editPost.mediaType);
+      setPreviewUrl(editPost.mediaUrl);
+      const date = new Date(editPost.scheduledAt);
+      setTime(`${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`);
+    } else {
+      // Reset form when not editing
+      setCaption("");
+      setFile(null);
+      setPreviewUrl(null);
+      setTime("09:00");
+      setMediaType("image");
+    }
+  }, [editPost]);
+
+  const checkAspectRatio = (file: File): Promise<boolean> => {
+    return new Promise((resolve) => {
+      if (file.type.startsWith("video/")) {
+        resolve(true); // Skip AR check for videos
+        return;
+      }
+
+      const img = new Image();
+      img.onload = () => {
+        const aspectRatio = img.width / img.height;
+        // Instagram allowed aspect ratios: 1:1 (square), 4:5 (portrait), 1.91:1 (landscape)
+        const isValidRatio = 
+          (aspectRatio >= 0.99 && aspectRatio <= 1.01) || // Square (1:1)
+          (aspectRatio >= 0.79 && aspectRatio <= 0.81) || // Portrait (4:5)
+          (aspectRatio >= 1.89 && aspectRatio <= 1.93);   // Landscape (1.91:1)
+        
+        resolve(isValidRatio);
+      };
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      setFile(selectedFile);
       // Auto-detect media type
       if (selectedFile.type.startsWith("video/")) {
         setMediaType("video");
+        setFile(selectedFile);
       } else {
         setMediaType("image");
+        // Check aspect ratio for images
+        const isValidRatio = await checkAspectRatio(selectedFile);
+        if (!isValidRatio) {
+          // Show cropper for invalid aspect ratios
+          const url = URL.createObjectURL(selectedFile);
+          setTempImageUrl(url);
+          setShowCropper(true);
+        } else {
+          setFile(selectedFile);
+        }
       }
     }
   };
 
+  const handleCropComplete = (croppedBlob: Blob) => {
+    // Convert blob to file
+    const croppedFile = new File([croppedBlob], "cropped-image.jpg", {
+      type: "image/jpeg",
+    });
+    setFile(croppedFile);
+    if (tempImageUrl) {
+      URL.revokeObjectURL(tempImageUrl);
+      setTempImageUrl(null);
+    }
+    setShowCropper(false);
+  };
+
   const handleSubmit = async () => {
-    if (!selectedDate || !file || !caption.trim() || !user) return;
+    if (!selectedDate || !caption.trim() || !user) return;
+    if (!editPost && !file) return; // For new posts, file is required
     
     setSubmitting(true);
     try {
-      // Upload media to Firebase Storage
-      const { url } = await uploadMediaAndGetUrl({ 
-        file, 
-        pathPrefix: "scheduled" 
-      });
+      let mediaUrl = editPost?.mediaUrl || "";
+      
+      // Only upload new file if one was selected
+      if (file) {
+        const { url } = await uploadMediaAndGetUrl({ 
+          file, 
+          pathPrefix: "scheduled" 
+        });
+        mediaUrl = url;
+      }
       
       const [hours, minutes] = time.split(":").map((n) => parseInt(n, 10));
       const scheduledAt = new Date(selectedDate);
@@ -78,45 +153,57 @@ export default function PostScheduleModal({
       const now = new Date();
       const isFuturePost = scheduledAt > now;
 
-      if (instagramData.igUserId && !isFuturePost) {
-        // Publish immediately only if scheduled for now or past
-        try {
-          const publishResponse = await axios.post("/api/instagram/publish", {
-            igUserId: instagramData.igUserId,
-            mediaUrl: url,
-            caption,
-            mediaType,
-          });
-          
-          if (publishResponse.data.success) {
-            postStatus = "published";
-            alertMessage = "Post published to Instagram successfully!";
-          } else {
-            postStatus = "failed";
-            alertMessage = "Failed to publish to Instagram";
-          }
-        } catch (error: unknown) {
-          console.error("Publish error:", error);
-          postStatus = "failed";
-          const err = error as { response?: { data?: { details?: string } }; message?: string };
-          alertMessage = `Failed to publish: ${err.response?.data?.details || err.message || "Unknown error"}`;
-        }
-      } else if (instagramData.igUserId && isFuturePost) {
-        // Save for future automatic publishing
-        alertMessage = `Post scheduled for ${format(scheduledAt, "PPp")}! It will be automatically published to Instagram at the scheduled time.`;
+      if (editPost) {
+        // Update existing post
+        await updateScheduledPost(editPost.id, {
+          caption,
+          mediaUrl,
+          mediaType,
+          scheduledAt: scheduledAt.getTime(),
+        });
+        alertMessage = `Post updated successfully!`;
       } else {
-        // No Instagram connection
-        alertMessage = `Post scheduled for ${format(scheduledAt, "PPp")}! Connect Instagram to enable automatic publishing.`;
-      }
+        // Create new post
+        if (instagramData.igUserId && !isFuturePost) {
+          // Publish immediately only if scheduled for now or past
+          try {
+            const publishResponse = await axios.post("/api/instagram/publish", {
+              igUserId: instagramData.igUserId,
+              mediaUrl,
+              caption,
+              mediaType,
+            });
+            
+            if (publishResponse.data.success) {
+              postStatus = "published";
+              alertMessage = "Post published to Instagram successfully!";
+            } else {
+              postStatus = "failed";
+              alertMessage = "Failed to publish to Instagram";
+            }
+          } catch (error: unknown) {
+            console.error("Publish error:", error);
+            postStatus = "failed";
+            const err = error as { response?: { data?: { details?: string } }; message?: string };
+            alertMessage = `Failed to publish: ${err.response?.data?.details || err.message || "Unknown error"}`;
+          }
+        } else if (instagramData.igUserId && isFuturePost) {
+          // Save for future automatic publishing
+          alertMessage = `Post scheduled for ${format(scheduledAt, "PPp")}! It will be automatically published to Instagram at the scheduled time.`;
+        } else {
+          // No Instagram connection
+          alertMessage = `Post scheduled for ${format(scheduledAt, "PPp")}! Connect Instagram to enable automatic publishing.`;
+        }
 
-      // Always save to Firestore for calendar display
-      await saveScheduledPost(user.uid, {
-        caption,
-        mediaUrl: url,
-        mediaType,
-        scheduledAt: scheduledAt.getTime(),
-        status: postStatus,
-      });
+        // Save to Firestore for calendar display
+        await saveScheduledPost(user.uid, {
+          caption,
+          mediaUrl,
+          mediaType,
+          scheduledAt: scheduledAt.getTime(),
+          status: postStatus,
+        });
+      }
       
       alert(alertMessage);
       
@@ -154,7 +241,7 @@ export default function PostScheduleModal({
       <div className="bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 p-6 -m-6 mb-0">
         <h2 className="text-2xl font-bold text-white flex items-center gap-3">
           <FaInstagram className="text-3xl" />
-          Schedule Post for {selectedDate ? format(selectedDate, "EEEE, MMMM d") : ""}
+          {editPost ? "Edit" : "Schedule"} Post for {selectedDate ? format(selectedDate, "EEEE, MMMM d") : ""}
         </h2>
       </div>
       
@@ -168,7 +255,7 @@ export default function PostScheduleModal({
             Upload Media
           </label>
           
-          {!file ? (
+          {!file && !editPost?.mediaUrl ? (
             <div 
               className="border-3 border-dashed border-purple-300 rounded-2xl p-12 text-center hover:border-purple-400 transition-all cursor-pointer bg-gradient-to-br from-purple-50 to-pink-50 hover:from-purple-100 hover:to-pink-100 group"
               onClick={() => fileInputRef.current?.click()}
@@ -217,20 +304,39 @@ export default function PostScheduleModal({
                 )}
               </div>
               
-              <button
-                onClick={removeFile}
-                className="absolute top-4 right-4 bg-red-500 text-white rounded-full p-3 hover:bg-red-600 transition-all hover:scale-110 shadow-lg"
-              >
-                <FaTimes className="w-4 h-4" />
-              </button>
+              {file && (
+                <>
+                  <button
+                    onClick={removeFile}
+                    className="absolute top-4 right-4 bg-red-500 text-white rounded-full p-3 hover:bg-red-600 transition-all hover:scale-110 shadow-lg"
+                  >
+                    <FaTimes className="w-4 h-4" />
+                  </button>
+                  
+                  {mediaType === "image" && (
+                    <button
+                      onClick={() => {
+                        if (previewUrl) {
+                          setTempImageUrl(previewUrl);
+                          setShowCropper(true);
+                        }
+                      }}
+                      className="absolute top-4 right-20 bg-purple-500 text-white rounded-full p-3 hover:bg-purple-600 transition-all hover:scale-110 shadow-lg"
+                      title="Crop image"
+                    >
+                      <FaCrop className="w-4 h-4" />
+                    </button>
+                  )}
+                </>
+              )}
               
               <div className="mt-4 flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
                 <div className={`p-2 rounded-lg ${mediaType === "image" ? "bg-purple-100" : "bg-blue-100"}`}>
                   {mediaType === "image" ? <FaImage className="text-purple-600" /> : <FaVideo className="text-blue-600" />}
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800 truncate">{file.name}</p>
-                  <p className="text-sm text-gray-500">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
+                  <p className="font-medium text-gray-800 truncate">{file?.name || "Existing media"}</p>
+                  <p className="text-sm text-gray-500">{file ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : ""}</p>
                 </div>
               </div>
             </div>
@@ -356,7 +462,7 @@ export default function PostScheduleModal({
           
           <button
             onClick={handleSubmit}
-            disabled={submitting || !file || !caption.trim()}
+            disabled={submitting || (!file && !editPost) || !caption.trim()}
             className={`
               px-8 py-3 rounded-xl font-semibold transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
               ${instagramData.igUserId 
@@ -373,12 +479,28 @@ export default function PostScheduleModal({
             ) : (
               <span className="flex items-center gap-2">
                 <FaInstagram className="text-lg" />
-                {instagramData.igUserId ? "Publish to Instagram" : "Save Post"}
+                {editPost ? "Update Post" : (instagramData.igUserId ? "Publish to Instagram" : "Save Post")}
               </span>
             )}
           </button>
         </div>
       </div>
+      
+      {/* Image Cropper Modal */}
+      {showCropper && tempImageUrl && (
+        <ImageCropper
+          open={showCropper}
+          onClose={() => {
+            setShowCropper(false);
+            if (tempImageUrl) {
+              URL.revokeObjectURL(tempImageUrl);
+              setTempImageUrl(null);
+            }
+          }}
+          imageUrl={tempImageUrl}
+          onCropComplete={handleCropComplete}
+        />
+      )}
     </Modal>
   );
 }

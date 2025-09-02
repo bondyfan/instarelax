@@ -13,6 +13,14 @@ service cloud.firestore {
       allow create: if request.auth != null && 
         request.auth.uid == request.resource.data.userId;
     }
+
+    // Users can read and write their own instagram connection
+    match /instagram_connections/{userId} {
+      // We save the document id as the uid; accept either id match or field match for safety
+      allow read, write: if request.auth != null && (
+        request.auth.uid == userId || request.auth.uid == request.resource.data.userId
+      );
+    }
   }
 }
 

@@ -11,6 +11,7 @@ import InstagramConnection from "@/components/InstagramConnection";
 import { format, addMonths, subMonths } from "date-fns";
 import { FaChevronLeft, FaChevronRight, FaSignOutAlt, FaCalendarAlt, FaInstagram } from "react-icons/fa";
 import { getScheduledPosts, deleteScheduledPost } from "@/lib/firestore";
+import type { ScheduledPost } from "@/types/schedule";
 
 export default function DashboardPage() {
   const { user, loading } = useAuth();
@@ -138,8 +139,9 @@ function CalendarSection() {
   const [month, setMonth] = useState<Date>(new Date());
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [events, setEvents] = useState<CalendarEvent[]>([]);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [posts, setPosts] = useState<ScheduledPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingPost, setEditingPost] = useState<ScheduledPost | null>(null);
   const { user } = useAuth();
 
   // Load events from Firestore
@@ -177,25 +179,26 @@ function CalendarSection() {
 
         const scheduledPosts = await getScheduledPosts(user.uid);
         const calendarEvents = scheduledPosts.map((post) => ({
-          id: post.id,
+          id: post.id || "",
+          title: post.caption || "Instagram Post",
           date: new Date(post.scheduledAt),
-          title: post.caption.slice(0, 20) + "...",
-          mediaType: post.mediaType,
           mediaUrl: post.mediaUrl,
+          mediaType: post.mediaType,
           status: post.status,
         }));
-        setEvents(calendarEvents);
+        setPosts(scheduledPosts);
+        setLoading(false);
       } catch (error) {
         console.error("Failed to load scheduled posts:", error);
       }
     };
 
     loadEvents();
-  }, [user, refreshKey]); // Refresh when user changes or refreshKey updates
+  }, [user]); // Refresh when user changes
 
-  const onSelectDate = (date: Date) => {
+  const handleSelectDate = (date: Date) => {
     setSelectedDate(date);
-    setShowModal(true);
+    setEditingPost(null); // Clear any editing state when selecting a new date
   };
 
   const navigateMonth = (direction: "prev" | "next") => {
@@ -209,7 +212,7 @@ function CalendarSection() {
       console.log("✅ Post deleted successfully from Firestore:", postId);
       
       // Refresh events by updating the refresh key
-      setRefreshKey(prev => prev + 1);
+      setPosts(posts.filter(post => post.id !== postId));
       
       // Show success message
       alert("✅ Post deleted successfully!");
@@ -217,6 +220,36 @@ function CalendarSection() {
       console.error("❌ Failed to delete post:", error);
       alert("❌ Failed to delete post. Please try again.");
     }
+  };
+
+  const handleEditPost = (event: CalendarEvent) => {
+    const post = posts.find(p => p.id === event.id);
+    if (post) {
+      setEditingPost(post);
+      setSelectedDate(new Date(post.scheduledAt));
+    }
+  };
+
+  const loadPosts = async () => {
+    if (!user) return;
+    try {
+      const scheduledPosts = await getScheduledPosts(user.uid);
+      setPosts(scheduledPosts);
+    } catch (error) {
+      console.error("Failed to load posts:", error);
+    }
+  };
+
+  const handleModalClose = () => {
+    setSelectedDate(null);
+    setEditingPost(null);
+    loadPosts(); // Reload posts after closing modal
+  };
+
+  const handleModalSuccess = () => {
+    setSelectedDate(null);
+    setEditingPost(null);
+    loadPosts(); // Reload posts after successful submission
   };
 
   return (
@@ -265,21 +298,29 @@ function CalendarSection() {
       <div className="p-6">
         <Calendar30 
           month={month} 
-          onSelectDate={onSelectDate} 
-          events={events} 
+          onSelectDate={handleSelectDate} 
+          events={posts.map((post) => ({
+            id: post.id || "",
+            title: post.caption || "Instagram Post",
+            date: new Date(post.scheduledAt),
+            mediaUrl: post.mediaUrl,
+            mediaType: post.mediaType,
+            status: post.status,
+          }))}
           onDeletePost={handleDeletePost}
+          onEditPost={handleEditPost}
         />
       </div>
 
-      <PostScheduleModal
-        open={showModal}
-        onClose={() => setShowModal(false)}
-        selectedDate={selectedDate}
-        onPostScheduled={() => {
-          // Refresh events by updating the refresh key
-          setRefreshKey(prev => prev + 1);
-        }}
-      />
+      {selectedDate && (
+        <PostScheduleModal
+          open={!!selectedDate}
+          onClose={handleModalClose}
+          onPostScheduled={handleModalSuccess}
+          selectedDate={selectedDate}
+          editPost={editingPost}
+        />
+      )}
     </div>
   );
 }

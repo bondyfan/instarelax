@@ -20,11 +20,13 @@ export default function Calendar30({
   onSelectDate,
   events,
   onDeletePost,
+  onEditPost,
 }: {
   month: Date;
   onSelectDate: (date: Date) => void;
   events?: CalendarEvent[];
   onDeletePost?: (postId: string) => void;
+  onEditPost?: (event: CalendarEvent) => void;
 }) {
   const days = useMemo(() => {
     const start = startOfMonth(month);
@@ -76,6 +78,7 @@ export default function Calendar30({
                     key={e.id} 
                     event={e} 
                     onDelete={onDeletePost}
+                    onEdit={onEditPost}
                   />
                 ))}
                 
@@ -97,10 +100,12 @@ export default function Calendar30({
 // PostCard component for displaying individual posts in calendar
 function PostCard({ 
   event, 
-  onDelete 
+  onDelete,
+  onEdit
 }: { 
   event: CalendarEvent; 
   onDelete?: (postId: string) => void;
+  onEdit?: (event: CalendarEvent) => void;
 }) {
   const [showActions, setShowActions] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -122,7 +127,12 @@ function PostCard({
       `}
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
-      onClick={(e) => e.stopPropagation()} // Prevent calendar day selection when clicking on post
+      onClick={(e) => {
+        e.stopPropagation(); // Prevent calendar day selection when clicking on post
+        if (onEdit) {
+          onEdit(event);
+        }
+      }}
     >
       {/* Media Preview */}
       {event.mediaUrl && !imageError ? (
