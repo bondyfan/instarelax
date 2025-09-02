@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
 import { FaCrop, FaCheck, FaTimes } from "react-icons/fa";
 import Modal from "./Modal";
 
@@ -11,13 +12,6 @@ interface ImageCropperProps {
   imageUrl: string;
   onCropComplete: (croppedImage: Blob) => void;
   aspectRatio?: number;
-}
-
-interface CroppedArea {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
 }
 
 const createImage = (url: string): Promise<HTMLImageElement> =>
@@ -31,7 +25,7 @@ const createImage = (url: string): Promise<HTMLImageElement> =>
 
 async function getCroppedImg(
   imageSrc: string,
-  pixelCrop: CroppedArea
+  pixelCrop: Area
 ): Promise<Blob> {
   const image = await createImage(imageSrc);
   const canvas = document.createElement("canvas");
@@ -76,7 +70,7 @@ export default function ImageCropper({
 }: ImageCropperProps) {
   const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<CroppedArea | null>(null);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [selectedRatio, setSelectedRatio] = useState(aspectRatio);
 
   const onCropChange = useCallback((location: { x: number; y: number }) => {
@@ -84,7 +78,7 @@ export default function ImageCropper({
   }, []);
 
   const onCropAreaChange = useCallback(
-    (croppedArea: any, croppedAreaPixels: CroppedArea) => {
+    (croppedArea: Area, croppedAreaPixels: Area) => {
       setCroppedAreaPixels(croppedAreaPixels);
     },
     []
