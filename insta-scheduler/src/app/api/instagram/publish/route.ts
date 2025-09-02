@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Step 1: Create media container
-    const containerParams: any = {
+    const containerParams: Record<string, string> = {
       access_token: accessToken,
       caption: caption || "",
     };
@@ -49,12 +49,13 @@ export async function POST(req: NextRequest) {
       containerId,
     });
 
-  } catch (error: any) {
-    console.error("Instagram publish error:", error?.response?.data || error);
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { error?: { message?: string } } }; message?: string };
+    console.error("Instagram publish error:", err?.response?.data || err);
     return NextResponse.json(
       { 
         error: "Failed to publish to Instagram",
-        details: error?.response?.data?.error?.message || error?.message 
+        details: err?.response?.data?.error?.message || err?.message 
       }, 
       { status: 500 }
     );

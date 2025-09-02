@@ -1,5 +1,5 @@
 import { getApp } from "firebase/app";
-import { getFirestore, collection, addDoc, query, where, getDocs, doc, updateDoc, deleteDoc, orderBy } from "firebase/firestore";
+import { getFirestore, collection, addDoc, query, where, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { ScheduledPost } from "@/types/schedule";
 
 export const db = getFirestore(getApp());

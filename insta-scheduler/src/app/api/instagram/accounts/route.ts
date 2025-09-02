@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import axios from "axios";
 
+interface IgBusinessAccount {
+  id: string;
+  username: string;
+  media_count?: number;
+}
+
+interface Page {
+  id: string;
+  name: string;
+  instagram_business_account?: IgBusinessAccount;
+}
+
 export async function GET() {
   try {
     const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
@@ -23,10 +35,10 @@ export async function GET() {
       },
     });
 
-    const pages = response.data.data;
+    const pages: Page[] = response.data.data as Page[];
     const instagramAccounts = pages
-      .filter((page: any) => page.instagram_business_account)
-      .map((page: any) => ({
+      .filter((page) => page.instagram_business_account)
+      .map((page) => ({
         pageId: page.id,
         pageName: page.name,
         instagram: {
@@ -36,12 +48,13 @@ export async function GET() {
       }));
 
     return NextResponse.json({ accounts: instagramAccounts });
-  } catch (error: any) {
-    console.error("Instagram accounts error:", error?.response?.data || error);
+  } catch (error: unknown) {
+    const err = error as { response?: { data?: { error?: { message?: string } } }; message?: string };
+    console.error("Instagram accounts error:", err?.response?.data || err);
     return NextResponse.json(
       { 
         error: "Failed to fetch Instagram accounts",
-        details: error?.response?.data?.error?.message || error?.message 
+        details: err?.response?.data?.error?.message || err?.message 
       }, 
       { status: 500 }
     );

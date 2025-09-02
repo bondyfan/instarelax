@@ -2,8 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "./AuthProvider";
-import Button from "./ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { FaInstagram, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
 import { db } from "@/lib/firestore";
 import { doc, setDoc } from "firebase/firestore";
@@ -18,7 +16,7 @@ interface InstagramData {
 }
 
 // Helper function to save Instagram connection to Firestore
-const saveInstagramConnection = async (userId: string, connectionData: any) => {
+const saveInstagramConnection = async (userId: string, connectionData: InstagramData) => {
   try {
     await setDoc(doc(db, "instagram_connections", userId), {
       ...connectionData,
@@ -77,7 +75,7 @@ export default function InstagramConnection() {
         localStorage.removeItem("instagram_connection");
       }
     }
-  }, []);
+  }, [user]);
 
   const handleConnect = async () => {
     if (!user) return;
@@ -114,7 +112,7 @@ export default function InstagramConnection() {
         setStatus("error");
         setTimeout(() => setStatus("disconnected"), 3000);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Connection error:", error);
       setStatus("error");
       setTimeout(() => setStatus("disconnected"), 3000);

@@ -5,11 +5,9 @@ import { useAuth } from "@/components/AuthProvider";
 import { useEffect, useState } from "react";
 import { signOut as fbSignOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import Calendar30 from "@/components/Calendar30";
+import Calendar30, { CalendarEvent } from "@/components/Calendar30";
 import PostScheduleModal from "@/components/PostScheduleModal";
 import InstagramConnection from "@/components/InstagramConnection";
-import Button from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { format, addMonths, subMonths } from "date-fns";
 import { FaChevronLeft, FaChevronRight, FaSignOutAlt, FaCalendarAlt, FaInstagram } from "react-icons/fa";
 import { getScheduledPosts, deleteScheduledPost } from "@/lib/firestore";
@@ -140,7 +138,7 @@ function CalendarSection() {
   const [month, setMonth] = useState<Date>(new Date());
   const [showModal, setShowModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const { user } = useAuth();
 

@@ -33,8 +33,12 @@ export default function LoginPage() {
         { merge: true }
       );
       router.replace("/dashboard");
-    } catch (e: any) {
-      const msg = e?.response?.data?.error || e?.message || "Failed to sign in";
+    } catch (e: unknown) {
+      let msg = "Failed to sign in";
+      if (typeof e === "object" && e !== null) {
+        const maybeErr = e as { response?: { data?: { error?: string } }; message?: string };
+        msg = maybeErr.response?.data?.error || maybeErr.message || msg;
+      }
       setError(String(msg));
     } finally {
       setLoading(false);

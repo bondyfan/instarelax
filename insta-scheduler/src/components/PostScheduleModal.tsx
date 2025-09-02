@@ -4,7 +4,6 @@ import { useState, useRef, useEffect } from "react";
 import { format } from "date-fns";
 import { FaImage, FaVideo, FaUpload, FaTimes, FaInstagram, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
 import Modal from "./Modal";
-import Button from "./ui/Button";
 import { uploadMediaAndGetUrl } from "@/lib/storage";
 import { useInstagramConnection } from "./InstagramConnection";
 import { useAuth } from "./AuthProvider";
@@ -96,10 +95,11 @@ export default function PostScheduleModal({
             postStatus = "failed";
             alertMessage = "Failed to publish to Instagram";
           }
-        } catch (error: any) {
+        } catch (error: unknown) {
           console.error("Publish error:", error);
           postStatus = "failed";
-          alertMessage = `Failed to publish: ${error.response?.data?.details || error.message}`;
+          const err = error as { response?: { data?: { details?: string } }; message?: string };
+          alertMessage = `Failed to publish: ${err.response?.data?.details || err.message || "Unknown error"}`;
         }
       } else if (instagramData.igUserId && isFuturePost) {
         // Save for future automatic publishing
@@ -128,7 +128,7 @@ export default function PostScheduleModal({
       onPostScheduled?.();
       onClose();
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Schedule error:", error);
       alert("Failed to schedule post");
     } finally {
