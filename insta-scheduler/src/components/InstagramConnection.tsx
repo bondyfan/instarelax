@@ -5,6 +5,8 @@ import { useAuth } from "./AuthProvider";
 import Button from "./ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
 import { FaInstagram, FaCheckCircle, FaExclamationTriangle } from "react-icons/fa";
+import { db } from "@/lib/firestore";
+import { doc, setDoc } from "firebase/firestore";
 
 type ConnectionStatus = "disconnected" | "connected" | "error";
 
@@ -14,6 +16,20 @@ interface InstagramData {
   accessToken?: string;
   igUserId?: string;
 }
+
+// Helper function to save Instagram connection to Firestore
+const saveInstagramConnection = async (userId: string, connectionData: any) => {
+  try {
+    await setDoc(doc(db, "instagram_connections", userId), {
+      ...connectionData,
+      userId,
+      updatedAt: Date.now(),
+      createdAt: Date.now(),
+    }, { merge: true });
+  } catch (error) {
+    console.error("Failed to save Instagram connection:", error);
+  }
+};
 
 export default function InstagramConnection() {
   const { user } = useAuth();
@@ -33,14 +49,14 @@ export default function InstagramConnection() {
       const accountType = urlParams.get("account_type");
       const igUserId = urlParams.get("ig_user_id");
       
-      if (token && username) {
-        setInstagramData({ username, accountType: accountType || "", accessToken: token, igUserId: igUserId || "" });
+      if (token && username && user) {
+        const connectionData = { username, accountType: accountType || "", accessToken: token, igUserId: igUserId || "" };
+        setInstagramData(connectionData);
         setStatus("connected");
         
-        // Store in localStorage for demo purposes
-        localStorage.setItem("instagram_connection", JSON.stringify({
-          username, accountType, accessToken: token, igUserId
-        }));
+        // Store in localStorage and Firestore
+        localStorage.setItem("instagram_connection", JSON.stringify(connectionData));
+        saveInstagramConnection(user.uid, connectionData);
         
         // Clean up URL
         window.history.replaceState({}, "", "/dashboard");
@@ -89,6 +105,11 @@ export default function InstagramConnection() {
         setInstagramData(connectionData);
         setStatus("connected");
         localStorage.setItem("instagram_connection", JSON.stringify(connectionData));
+        
+        // Also save to Firestore for Functions access
+        if (user) {
+          saveInstagramConnection(user.uid, connectionData);
+        }
       } else {
         setStatus("error");
         setTimeout(() => setStatus("disconnected"), 3000);
@@ -109,60 +130,95 @@ export default function InstagramConnection() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FaInstagram className="text-pink-500" />
-          Instagram Connection
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
+    <div className="card-modern overflow-hidden hover-lift">
+      <div className="bg-gradient-instagram p-6 text-white">
+        <div className="flex items-center gap-3">
+          <div className="p-3 rounded-xl bg-white/20 backdrop-blur-sm">
+            <FaInstagram className="text-2xl" />
+          </div>
+          <h3 className="text-xl font-bold">Instagram Connection</h3>
+        </div>
+      </div>
+      
+      <div className="p-6">
         <div className="space-y-4">
           {status === "disconnected" && (
-            <div className="text-center py-6">
-              <FaInstagram className="mx-auto text-4xl text-gray-400 mb-4" />
-              <p className="text-gray-600 mb-4">Connect your Instagram Business account to start publishing posts</p>
-              <Button onClick={handleConnect} disabled={loading}>
-                {loading ? "Connecting..." : "Connect Instagram"}
-              </Button>
+            <div className="text-center py-4 animate-fade-in">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-instagram p-0.5">
+                <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                  <FaInstagram className="text-3xl gradient-text-instagram" />
+                </div>
+              </div>
+              <p className="text-gray-600 mb-6">Connect your Instagram Business account to start publishing posts automatically</p>
+              <button 
+                onClick={handleConnect} 
+                disabled={loading}
+                className="btn-instagram w-full max-w-xs mx-auto flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Connecting...
+                  </>
+                ) : (
+                  <>
+                    <FaInstagram className="text-lg" />
+                    Connect Instagram
+                  </>
+                )}
+              </button>
             </div>
           )}
           
           {status === "connected" && (
-            <div className="text-center py-4">
-              <div className="flex items-center justify-center gap-2 text-green-600 mb-4">
-                <FaCheckCircle />
-                <span className="font-medium">Connected</span>
+            <div className="text-center py-4 animate-fade-in">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 p-1">
+                <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                  <FaCheckCircle className="text-3xl text-green-500" />
+                </div>
               </div>
-              <div className="space-y-2 text-sm text-gray-600">
-                <p><strong>Username:</strong> @{instagramData.username}</p>
-                <p><strong>Account Type:</strong> {instagramData.accountType}</p>
+              <h4 className="font-semibold text-lg text-gray-800 mb-1">Successfully Connected!</h4>
+              <div className="space-y-3 text-sm bg-gray-50 rounded-xl p-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Username:</span>
+                  <span className="font-medium text-gray-800">@{instagramData.username}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600">Account Type:</span>
+                  <span className="font-medium text-gray-800 capitalize">{instagramData.accountType}</span>
+                </div>
               </div>
-              <div className="mt-4">
-                <Button variant="outline" onClick={handleDisconnect}>
-                  Disconnect
-                </Button>
-              </div>
+              <button 
+                onClick={handleDisconnect}
+                className="text-red-500 hover:text-red-600 font-medium text-sm"
+              >
+                Disconnect Account
+              </button>
             </div>
           )}
           
           {status === "error" && (
-            <div className="text-center py-6">
-              <div className="flex items-center justify-center gap-2 text-red-600 mb-4">
-                <FaExclamationTriangle />
-                <span className="font-medium">Connection Failed</span>
+            <div className="text-center py-4 animate-fade-in">
+              <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-gradient-to-r from-red-400 to-pink-500 p-1">
+                <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                  <FaExclamationTriangle className="text-3xl text-red-500" />
+                </div>
               </div>
+              <h4 className="font-semibold text-lg text-gray-800 mb-2">Connection Failed</h4>
               <p className="text-gray-600 text-sm mb-4">
                 Please make sure you have an Instagram Business account connected to a Facebook Page
               </p>
-              <Button onClick={handleConnect}>
+              <button 
+                onClick={handleConnect}
+                className="btn-primary"
+              >
                 Try Again
-              </Button>
+              </button>
             </div>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 

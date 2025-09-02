@@ -2,7 +2,8 @@ import { cookies } from "next/headers";
 import { getAdminAuth, getAdminDb } from "@/lib/firebaseAdmin";
 
 export async function getServerUser() {
-  const session = cookies().get("session")?.value;
+  const cookieStore = await cookies();
+  const session = cookieStore.get("session")?.value;
   if (!session) return null;
   try {
     const decoded = await getAdminAuth().verifySessionCookie(session, true);
