@@ -1,5 +1,5 @@
 const {onSchedule} = require("firebase-functions/v2/scheduler");
-const {logger, config} = require("firebase-functions");
+const {logger} = require("firebase-functions");
 const admin = require("firebase-admin");
 const axios = require("axios");
 
@@ -9,7 +9,10 @@ admin.initializeApp();
  * Scheduled function that runs every minute to check for posts
  * that need to be published to Instagram
  */
-exports.publishScheduledPosts = onSchedule("every 1 minutes", async (event) => {
+exports.publishScheduledPosts = onSchedule({
+  schedule: "every 1 minutes",
+  secrets: ["FACEBOOK_ACCESS_TOKEN"]
+}, async (event) => {
   logger.info("Checking for scheduled posts to publish...");
   
   try {
@@ -113,10 +116,10 @@ exports.publishScheduledPosts = onSchedule("every 1 minutes", async (event) => {
  */
 async function publishToInstagram({igUserId, mediaUrl, caption, mediaType}) {
   try {
-    const accessToken = config().facebook.access_token;
+    const accessToken = process.env.FACEBOOK_ACCESS_TOKEN;
     
     if (!accessToken) {
-      throw new Error("Facebook access token not configured in Firebase config");
+      throw new Error("Facebook access token not configured as environment variable");
     }
     
     // Step 1: Create media container
@@ -158,15 +161,14 @@ async function publishToInstagram({igUserId, mediaUrl, caption, mediaType}) {
 }
 
 /**
- * HTTP function to manually trigger scheduled post publishing
- * Useful for testing or manual triggering
+ * Alternative scheduled function with same functionality
+ * (Kept for redundancy but can be removed if not needed)
  */
-exports.triggerScheduledPosts = onSchedule("every 1 minutes", async (req, res) => {
-  try {
-    await exports.publishScheduledPosts();
-    res.json({success: true, message: "Scheduled posts processed"});
-  } catch (error) {
-    logger.error("Manual trigger error:", error);
-    res.status(500).json({success: false, error: error.message});
-  }
+exports.triggerScheduledPosts = onSchedule({
+  schedule: "every 1 minutes",
+  secrets: ["FACEBOOK_ACCESS_TOKEN"]
+}, async (event) => {
+  // This is redundant with publishScheduledPosts
+  // Consider removing this function to avoid duplicate processing
+  logger.info("Trigger function called - skipping as publishScheduledPosts handles this");
 });
