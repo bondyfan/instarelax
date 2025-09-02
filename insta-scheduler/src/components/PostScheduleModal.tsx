@@ -276,13 +276,14 @@ export default function PostScheduleModal({
             </div>
           ) : (
             <div className="relative animate-slide-up">
-              <div className="rounded-2xl overflow-hidden shadow-lg">
+              <div className="rounded-2xl overflow-hidden shadow-lg bg-gray-100 flex items-center justify-center" style={{ minHeight: '320px' }}>
                 {mediaType === "image" ? (
                   previewUrl ? (
                     <img 
                       src={previewUrl} 
                       alt="Preview" 
-                      className="w-full h-80 object-cover"
+                      className="max-w-full max-h-80 object-contain"
+                      style={{ aspectRatio: 'auto' }}
                     />
                   ) : (
                     <div className="w-full h-80 bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center">
@@ -293,7 +294,7 @@ export default function PostScheduleModal({
                   previewUrl ? (
                     <video 
                       src={previewUrl} 
-                      className="w-full h-80 object-cover"
+                      className="max-w-full max-h-80 object-contain"
                       controls
                     />
                   ) : (
