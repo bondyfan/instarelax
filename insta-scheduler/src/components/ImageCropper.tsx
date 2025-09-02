@@ -98,7 +98,7 @@ export default function ImageCropper({
 
   // Instagram aspect ratio presets
   const aspectRatios = [
-    { label: "Max Portrait (0.8)", value: 0.8 },
+    { label: "Max Portrait (3:4)", value: 3 / 4 },
     { label: "Portrait (4:5)", value: 4 / 5 },
     { label: "Tall Portrait (0.9)", value: 0.9 },
     { label: "Square (1:1)", value: 1 },
